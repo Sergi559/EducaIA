@@ -1,0 +1,219 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
+    }
+
+    function isValidOptionalString(data, fieldName, maxLen) {
+      return !(fieldName in data) || (data[fieldName] is string && data[fieldName].size() <= maxLen);
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['role', 'createdAt']) &&
+        data.keys().hasOnly(['role', 'createdAt']) &&
+        data.role in ['alumno', 'docente'] &&
+        data.createdAt == request.time;
+    }
+
+    function isValidGestionSection(section) {
+      return section in [
+        'calendario-escolar',
+        'comunicados',
+        'reglamentos',
+        'materias',
+        'preguntas-frecuentes'
+      ];
+    }
+
+    function isValidGestionItem(data) {
+      return data.keys().hasAll(['section', 'title', 'body', 'updatedAt', 'updatedBy']) &&
+        data.keys().hasOnly([
+          'section',
+          'title',
+          'body',
+          'dateLabel',
+          'categoryTag',
+          'authorizedBy',
+          'updatedAt',
+          'updatedBy'
+        ]) &&
+        isValidGestionSection(data.section) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.body is string && data.body.size() >= 1 && data.body.size() <= 5000 &&
+        isValidOptionalString(data, 'dateLabel', 80) &&
+        isValidOptionalString(data, 'categoryTag', 80) &&
+        isValidOptionalString(data, 'authorizedBy', 120) &&
+        data.updatedAt == request.time &&
+        data.updatedBy is string &&
+        data.updatedBy == request.auth.uid &&
+        data.updatedBy.size() <= 128;
+    }
+
+    function isValidOrganizaTask(data) {
+      return data.keys().hasAll([
+          'title',
+          'subjectId',
+          'dueDate',
+          'kind',
+          'completed',
+          'subtasks',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title',
+          'subjectId',
+          'dueDate',
+          'kind',
+          'notes',
+          'completed',
+          'subtasks',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.subjectId is string && data.subjectId.size() >= 1 && data.subjectId.size() <= 64 &&
+        data.dueDate is string && data.dueDate.size() == 10 && data.dueDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.kind in ['tarea', 'trabajo-practico', 'evaluacion', 'practica-campo'] &&
+        isValidOptionalString(data, 'notes', 1000) &&
+        data.completed is bool &&
+        data.subtasks is list &&
+        data.subtasks.size() <= 30 &&
+        (data.subtasks.size() == 0 || data.subtasks[0] is map) &&
+        data.createdAt is timestamp &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidWeeklyBlock(data) {
+      return data.keys().hasAll([
+          'day',
+          'subjectId',
+          'timeRange',
+          'durationMinutes',
+          'focusTopic',
+          'completedThisWeek',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'day',
+          'subjectId',
+          'timeRange',
+          'durationMinutes',
+          'focusTopic',
+          'completedThisWeek',
+          'updatedAt'
+        ]) &&
+        data.day in ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'] &&
+        data.subjectId is string && data.subjectId.size() >= 1 && data.subjectId.size() <= 64 &&
+        data.timeRange is string && data.timeRange.size() >= 1 && data.timeRange.size() <= 40 &&
+        data.durationMinutes is int && data.durationMinutes >= 5 && data.durationMinutes <= 480 &&
+        data.focusTopic is string && data.focusTopic.size() >= 1 && data.focusTopic.size() <= 200 &&
+        data.completedThisWeek is bool &&
+        data.updatedAt == request.time;
+    }
+
+    // Perfil mínimo del usuario (sin PII, sin auto-asignación de rol admin)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming());
+      allow update, delete: if false;
+
+      match /organiza_tasks/{taskId} {
+        allow get: if isValidId(userId) && isValidId(taskId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(taskId) && isOwner(userId) &&
+          isValidOrganizaTask(incoming()) &&
+          incoming().createdAt == request.time;
+        allow update: if isValidId(userId) && isValidId(taskId) && isOwner(userId) &&
+          isValidOrganizaTask(incoming()) &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'title',
+            'subjectId',
+            'dueDate',
+            'kind',
+            'notes',
+            'completed',
+            'subtasks',
+            'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(taskId) && isOwner(userId);
+      }
+
+      match /organiza_weekly/{blockId} {
+        allow get: if isValidId(userId) && isValidId(blockId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(blockId) && isOwner(userId) &&
+          isValidWeeklyBlock(incoming());
+        allow update: if isValidId(userId) && isValidId(blockId) && isOwner(userId) &&
+          isValidWeeklyBlock(incoming()) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'day',
+            'subjectId',
+            'timeRange',
+            'durationMinutes',
+            'focusTopic',
+            'completedThisWeek',
+            'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(blockId) && isOwner(userId);
+      }
+    }
+
+    // Marcadores de administrador institucional (solo modificables desde Firebase Console / Admin SDK)
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list, write: if false;
+    }
+
+    // Información institucional pública (lectura pública, escritura exclusiva de administradores autorizados)
+    match /gestion_items/{itemId} {
+      allow get: if isValidId(itemId);
+      allow list: if true;
+      allow create: if isValidId(itemId) && isAdmin() && isValidGestionItem(incoming());
+      allow update: if isValidId(itemId) && isAdmin() &&
+        isValidGestionItem(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'section',
+          'title',
+          'body',
+          'dateLabel',
+          'categoryTag',
+          'authorizedBy',
+          'updatedAt',
+          'updatedBy'
+        ]);
+      allow delete: if isValidId(itemId) && isAdmin();
+    }
+  }
+}

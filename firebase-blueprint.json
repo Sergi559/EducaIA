@@ -1,0 +1,216 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Minimal non-PII user role record stored per authenticated Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["alumno", "docente"],
+          "description": "Standard self-registered educational role."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created."
+        }
+      },
+      "required": ["role", "createdAt"]
+    },
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Console-managed institutional administrator marker keyed by UID.",
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean",
+          "description": "Whether institutional admin permissions are active."
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when admin privilege was granted."
+        }
+      },
+      "required": ["active", "grantedAt"]
+    },
+    "GestionItem": {
+      "title": "GestionItem",
+      "description": "Authorized public institutional record for EDU-GESTION.",
+      "type": "object",
+      "properties": {
+        "section": {
+          "type": "string",
+          "enum": [
+            "calendario-escolar",
+            "comunicados",
+            "reglamentos",
+            "materias",
+            "preguntas-frecuentes"
+          ],
+          "description": "Institutional section identifier."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Document or announcement title."
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 5000,
+          "description": "Authorized institutional text."
+        },
+        "dateLabel": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Optional date or period label."
+        },
+        "categoryTag": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Optional category or department tag."
+        },
+        "authorizedBy": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Optional authorizing institutional role or office."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation or last update."
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "UID of the administrator who created or updated the item."
+        }
+      },
+      "required": ["section", "title", "body", "updatedAt", "updatedBy"]
+    },
+    "OrganizaTask": {
+      "title": "OrganizaTask",
+      "description": "Private school task with subtasks in EDU-ORGANIZA.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Task title."
+        },
+        "subjectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Subject identifier."
+        },
+        "dueDate": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "maxLength": 10,
+          "description": "Due date in YYYY-MM-DD format."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["tarea", "trabajo-practico", "evaluacion", "practica-campo"],
+          "description": "Task category."
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Optional student notes."
+        },
+        "completed": {
+          "type": "boolean",
+          "description": "Completion flag."
+        },
+        "subtasks": {
+          "type": "array",
+          "description": "Up to 30 subtasks breaking down larger assignments."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": ["title", "subjectId", "dueDate", "kind", "completed", "subtasks", "createdAt", "updatedAt"]
+    },
+    "WeeklyStudyBlock": {
+      "title": "WeeklyStudyBlock",
+      "description": "Private weekly study block in EDU-ORGANIZA.",
+      "type": "object",
+      "properties": {
+        "day": {
+          "type": "string",
+          "enum": ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"],
+          "description": "Day of the week."
+        },
+        "subjectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Subject identifier."
+        },
+        "timeRange": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "Suggested time label."
+        },
+        "durationMinutes": {
+          "type": "integer",
+          "description": "Planned duration in minutes (5 to 480)."
+        },
+        "focusTopic": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Topic or study objective."
+        },
+        "completedThisWeek": {
+          "type": "boolean",
+          "description": "Whether completed this week."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": ["day", "subjectId", "timeRange", "durationMinutes", "focusTopic", "completedThisWeek", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Minimal per-user role profile isolated to owner UID."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Read-only client check for institutional administrator UIDs."
+    },
+    "/gestion_items/{itemId}": {
+      "schema": { "$ref": "#/entities/GestionItem" },
+      "description": "Public institutional documents for EDU-GESTION (public read, admin write)."
+    },
+    "/users/{userId}/organiza_tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/OrganizaTask" },
+      "description": "Private EDU-ORGANIZA tasks owned by userId."
+    },
+    "/users/{userId}/organiza_weekly/{blockId}": {
+      "schema": { "$ref": "#/entities/WeeklyStudyBlock" },
+      "description": "Private EDU-ORGANIZA weekly study blocks owned by userId."
+    }
+  }
+}

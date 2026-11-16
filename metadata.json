@@ -1,0 +1,8 @@
+{
+  "name": "EDUCAIA",
+  "description": "Plataforma educativa con inteligencia artificial para escuelas técnicas agropecuarias de Argentina. Aprender no termina cuando termina la clase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
